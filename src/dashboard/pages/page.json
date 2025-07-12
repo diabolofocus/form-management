@@ -1,0 +1,5 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/dashboard-page.json",
+  "id": "9d010b4e-39dc-4ed8-8f88-e0306958456b",
+  "title": "form-management"
+}

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/wix-config.json",
+  "appId": "86521fb5-6c8d-4739-9c4c-a890719ab4b0",
+  "projectId": "form-management"
+}
