@@ -191,31 +191,6 @@ export async function getSubmission(submissionId: string): Promise<CleanFormSubm
 }
 
 /**
- * Count submissions for a namespace
- */
-export async function countSubmissions(namespace: string, status?: string): Promise<number> {
-    try {
-        console.log('Counting submissions for:', namespace, status);
-
-        let query = elevatedQuerySubmissionsByNamespace()
-            .eq('namespace', namespace);
-
-        if (status) {
-            query = query.eq('status', status);
-        }
-
-        const result = await query.find();
-
-        // Count only valid submissions
-        const validCount = result.items.filter(submission => isValidWixSubmission(submission)).length;
-        return validCount;
-    } catch (error) {
-        console.error('Error counting submissions:', error);
-        throw new Error(`Failed to count submissions: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-}
-
-/**
  * Search submissions by content
  */
 export async function searchSubmissions(
@@ -281,12 +256,11 @@ export async function getFormNamespaces(): Promise<Array<{ namespace: string; co
             });
 
             if (submissions.items.length > 0) {
-                // Extract unique form IDs - they're now guaranteed to be strings
-                const formIds = [...new Set(
+                const formIds = Array.from(new Set(
                     submissions.items
                         .map(sub => sub.formId)
                         .filter((formId): formId is string => !!formId)
-                )];
+                ));
 
                 results.push({
                     namespace,
@@ -359,7 +333,7 @@ export async function handleGetForms(request: Request) {
         // First, get all submissions to extract form information
         const submissions = await querySubmissions({
             namespace,
-            limit: 1000,
+            limit: 100,
             sortBy: 'createdDate',
             sortOrder: 'desc'
         });

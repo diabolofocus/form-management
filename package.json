@@ -32,7 +32,7 @@
     "wix": "wix",
     "build": "wix app build",
     "release": "wix app release",
-    "dev": "wix app preview",
+    "dev": "wix app dev",
     "dev:api": "tsx watch --clear-screen=false server.ts",
     "build:next": "next build",
     "start": "next start",

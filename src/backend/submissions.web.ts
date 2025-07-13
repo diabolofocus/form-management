@@ -36,8 +36,6 @@ function generateFormName(submission: CleanFormSubmission, formId: string): stri
 
   return `${name} (${formId.substring(0, 8)}...)`;
 }
-
-// Get forms for a specific namespace
 export const getForms = webMethod(
   Permissions.Anyone,
   async (namespace: string): Promise<FormInfo[]> => {
@@ -46,7 +44,7 @@ export const getForms = webMethod(
 
       const submissions = await querySubmissions({
         namespace,
-        limit: 1000
+        limit: 100
       });
 
       const formMap = new Map<string, {
@@ -88,6 +86,20 @@ export const getForms = webMethod(
     } catch (error) {
       console.error('Error getting forms for namespace:', error);
       return [];
+    }
+  }
+);
+
+// Add this simple test function to verify the web method is working
+export const testGetForms = webMethod(
+  Permissions.Anyone,
+  async (): Promise<string> => {
+    try {
+      console.log('Test function called');
+      return 'Web method is working!';
+    } catch (error) {
+      console.error('Test error:', error);
+      return 'Error in web method';
     }
   }
 );
