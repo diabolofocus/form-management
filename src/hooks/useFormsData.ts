@@ -1,107 +1,68 @@
 // src/hooks/useFormsData.ts
-import { useState, useEffect, useCallback } from 'react';
-import type {
-    CleanFormSubmission,
-    QuerySubmissionsOptions,
-    SubmissionsQueryResult
-} from '../types';
+import { useState, useCallback } from 'react';
+import { DataLoadResult, CleanFormSubmission, SubmissionsQueryResult } from '../types/dashboard';
+import { processFormSubmissions, extractFormFieldNames } from '../utils/dataProcessing';
 
-interface UseFormsDataReturn {
-    submissions: CleanFormSubmission[];
-    loading: boolean;
-    error: string | null;
-    totalCount: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-    refetch: () => Promise<void>;
-    loadMore: () => Promise<void>;
-    search: (query: string) => Promise<void>;
-}
+export const useFormsData = () => {
+    const [isLoading, setIsLoading] = useState(false);
 
-export function useFormsData(options: QuerySubmissionsOptions): UseFormsDataReturn {
-    const [submissions, setSubmissions] = useState<CleanFormSubmission[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [totalCount, setTotalCount] = useState(0);
-    const [hasNext, setHasNext] = useState(false);
-    const [hasPrev, setHasPrev] = useState(false);
-    const [nextCursor, setNextCursor] = useState<string | undefined>();
-
-    const fetchSubmissions = useCallback(async (opts: QuerySubmissionsOptions, append = false) => {
-        if (!opts.namespace) return;
-
-        setLoading(true);
-        setError(null);
-
+    const loadFormData = useCallback(async (
+        namespace: string,
+        formId: string,
+        limit: number = 50
+    ): Promise<DataLoadResult> => {
+        setIsLoading(true);
         try {
-            const response = await fetch('/api/submissions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(opts)
+            console.log('🔄 [FORMS] Loading submissions for form:', formId);
+
+            const { getSubmissions } = await import('../backend/submissions.web');
+            const submissionsData: SubmissionsQueryResult = await getSubmissions({
+                namespace: namespace,
+                formId: formId,
+                limit: limit
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch submissions');
-            }
+            console.log('✅ [FORMS] Submissions loaded:', submissionsData);
+            console.log('📊 [FORMS] Number of submissions:', submissionsData.items.length);
 
-            const result: SubmissionsQueryResult = await response.json();
+            if (submissionsData.items.length > 0) {
+                // Type the submissions correctly - they should already be CleanFormSubmission
+                const typedSubmissions = submissionsData.items as CleanFormSubmission[];
 
-            if (append) {
-                setSubmissions(prev => [...prev, ...result.items]);
+                // Extract field names from submissions
+                const fieldNames = extractFormFieldNames(typedSubmissions);
+
+                console.log('📋 [FORMS] Field names extracted:', fieldNames);
+
+                // Process form submissions
+                const processedSubmissions = processFormSubmissions(typedSubmissions, fieldNames);
+
+                console.log('✅ [FORMS] Display submissions prepared:', processedSubmissions.length);
+
+                return {
+                    items: processedSubmissions,
+                    fields: fieldNames,
+                    totalCount: submissionsData.totalCount || processedSubmissions.length,
+                    message: `✅ Loaded ${processedSubmissions.length} submissions for selected form!`
+                };
             } else {
-                setSubmissions(result.items);
+                return {
+                    items: [],
+                    fields: [],
+                    totalCount: 0,
+                    message: '📝 No submissions found for this form.'
+                };
             }
-
-            setTotalCount(result.totalCount);
-            setHasNext(result.hasNext);
-            setHasPrev(result.hasPrev);
-
-            // Handle cursor safely - filter out null/undefined values
-            const nextCursorValue = result.cursors.next;
-            setNextCursor(nextCursorValue || undefined);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch submissions');
+        } catch (error) {
+            console.error('❌ [FORMS] Error loading submissions:', error);
+            throw new Error(`Failed to load form submissions: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     }, []);
 
-    const refetch = useCallback(() => {
-        return fetchSubmissions(options);
-    }, [fetchSubmissions, options]);
-
-    const loadMore = useCallback(async () => {
-        if (!hasNext || !nextCursor) return;
-
-        return fetchSubmissions({
-            ...options,
-            cursor: nextCursor
-        }, true);
-    }, [fetchSubmissions, options, hasNext, nextCursor]);
-
-    const search = useCallback(async (query: string) => {
-        // For now, we'll handle search client-side
-        return fetchSubmissions({
-            ...options,
-            // Add search query to options if your API supports it
-            searchQuery: query
-        });
-    }, [fetchSubmissions, options]);
-
-    // Initial load and when options change
-    useEffect(() => {
-        refetch();
-    }, [refetch]);
-
     return {
-        submissions,
-        loading,
-        error,
-        totalCount,
-        hasNext,
-        hasPrev,
-        refetch,
-        loadMore,
-        search
+        loadFormData,
+        isLoading
     };
-}
+};

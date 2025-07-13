@@ -1,11 +1,15 @@
 // src/backend/types.ts
-export interface FormSubmission {
+// Re-export your existing types to avoid conflicts
+export type FormSubmission = CleanFormSubmission;
+
+// Import your existing types
+export interface CleanFormSubmission {
     _id: string;
-    _createdDate: Date;
-    _updatedDate: Date;
+    _createdDate: Date;  // Changed from string to Date
+    _updatedDate: Date;  // Changed from string to Date  
     formId: string;
     namespace: string;
-    status: 'CONFIRMED' | 'PENDING' | 'PAYMENT_WAITING' | 'PAYMENT_CANCELED';
+    status: string;
     submissions: Record<string, any>;
     submitter?: {
         memberId?: string;
