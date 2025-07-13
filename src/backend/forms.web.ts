@@ -272,11 +272,11 @@ export async function getFormNamespaces(): Promise<Array<{ namespace: string; co
       console.log(`Namespace ${namespace} - found ${submissions.items.length} submissions`);
 
       if (submissions.items.length > 0) {
-        const formIds = [...new Set(
+        const formIds = Array.from(new Set(
           submissions.items
             .map(sub => sub.formId)
             .filter((formId): formId is string => !!formId)
-        )];
+        ));
 
         console.log(`Namespace ${namespace} - unique form IDs:`, formIds);
 

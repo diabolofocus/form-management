@@ -1,7 +1,22 @@
 // backend/submissions.web.ts
 import { webMethod, Permissions } from '@wix/web-methods';
 import { querySubmissions } from './forms';
-import type { FormInfo, CleanFormSubmission, QuerySubmissionsOptions, SubmissionsQueryResult } from '../types/index';
+import type {
+  FormInfo,
+  CleanFormSubmission,
+  QuerySubmissionsOptions,
+  SubmissionsQueryResult,
+  CMSCollection,
+  CMSQueryResult,
+  CMSQueryOptions,
+  CollectionInfo
+} from '../types/index';
+
+import {
+  getCMSCollections,
+  queryCMSItems,
+  getCMSCollectionsWithCounts
+} from './forms';
 
 // Generate form names based on submission data
 function generateFormName(submission: CleanFormSubmission, formId: string): string {
@@ -162,6 +177,77 @@ export const getAllSubmissions = webMethod(
     } catch (error) {
       console.error('Error getting all submissions:', error);
       throw new Error(`Failed to get submissions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+);
+
+// ================================================================
+// CMS Collections Web Methods
+
+
+// Get all CMS collections
+export const getCMSCollectionsList = webMethod(
+  Permissions.Anyone,
+  async (): Promise<CollectionInfo[]> => {
+    try {
+      console.log('Getting CMS collections list');
+      const collections = await getCMSCollectionsWithCounts();
+      console.log(`Found ${collections.length} CMS collections`);
+      return collections;
+    } catch (error) {
+      console.error('Error getting CMS collections:', error);
+      return [];
+    }
+  }
+);
+
+// Get CMS collection details
+export const getCMSCollectionDetails = webMethod(
+  Permissions.Anyone,
+  async (collectionId: string): Promise<CMSCollection | null> => {
+    try {
+      console.log('Getting CMS collection details for:', collectionId);
+      const collections = await getCMSCollections();
+      const collection = collections.find(c => c._id === collectionId);
+      return collection || null;
+    } catch (error) {
+      console.error('Error getting CMS collection details:', error);
+      return null;
+    }
+  }
+);
+
+// Get CMS collection items
+export const getCMSCollectionItems = webMethod(
+  Permissions.Anyone,
+  async (options: {
+    collectionId: string;
+    limit?: number;
+    cursor?: string | null;
+    sortBy?: string | null;
+    sortOrder?: 'asc' | 'desc' | null;
+    searchQuery?: string;
+    fields?: string[];
+  }): Promise<CMSQueryResult> => {
+    try {
+      console.log('Getting CMS collection items with options:', options);
+
+      const queryOptions: CMSQueryOptions = {
+        collectionId: options.collectionId,
+        limit: options.limit || 50,
+        cursor: options.cursor || undefined,
+        sortBy: options.sortBy || undefined,
+        sortOrder: options.sortOrder || undefined,
+        searchQuery: options.searchQuery,
+        fields: options.fields
+      };
+
+      const result = await queryCMSItems(queryOptions);
+      console.log(`Found ${result.items.length} CMS items`);
+      return result;
+    } catch (error) {
+      console.error('Error getting CMS collection items:', error);
+      throw new Error(`Failed to get CMS collection items: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 );

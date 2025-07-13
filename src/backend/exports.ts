@@ -3,7 +3,6 @@ import type { CleanFormSubmission, QuerySubmissionsOptions, SubmissionsQueryResu
 import {
     querySubmissions,
     getSubmission,
-    countSubmissions,
     searchSubmissions,
     getFormNamespaces,
     handleGetForms,
@@ -15,7 +14,6 @@ export type { CleanFormSubmission, QuerySubmissionsOptions, SubmissionsQueryResu
 export {
     querySubmissions,
     getSubmission,
-    countSubmissions,
     searchSubmissions,
     getFormNamespaces,
     handleGetForms,

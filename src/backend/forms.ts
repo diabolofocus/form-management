@@ -14,6 +14,10 @@ console.log('auth object:', auth);
 const elevatedQuerySubmissionsByNamespace = auth.elevate(submissions.querySubmissionsByNamespace);
 const elevatedGetSubmission = auth.elevate(submissions.getSubmission);
 
+
+import { collections, items } from '@wix/data';
+import type { CMSCollection, CMSQueryOptions, CMSQueryResult, CollectionInfo, CMSItem } from '../types';
+
 console.log('Elevated functions created');
 
 // Define type for raw Wix submission (to avoid conflicts)
@@ -274,4 +278,196 @@ export async function getFormNamespaces(): Promise<Array<{ namespace: string; co
     console.log('=== getFormNamespaces completed ===');
 
     return results;
+}
+
+// ================================================================
+// CMS Collections Functions
+
+
+const elevatedListDataCollections = auth.elevate(collections.listDataCollections);
+const elevatedQueryDataItems = auth.elevate(items.query);
+
+/**
+ * Get all CMS collections
+ */
+export async function getCMSCollections(): Promise<CMSCollection[]> {
+    console.log('=== getCMSCollections called ===');
+
+    try {
+        const result = await elevatedListDataCollections({
+            paging: {
+                limit: 100,
+                offset: 0
+            },
+            consistentRead: true
+        });
+
+        console.log('Raw collections result:', result);
+
+        if (!result.collections) {
+            console.log('No collections found');
+            return [];
+        }
+
+        const cmsCollections: CMSCollection[] = result.collections
+            .filter(collection => collection._id && collection.displayName)
+            .map(collection => ({
+                _id: collection._id!,
+                _createdDate: collection._createdDate || new Date(),
+                _updatedDate: collection._updatedDate || new Date(),
+                displayName: collection.displayName!,
+                collectionType: (collection.collectionType as any) || 'NATIVE',
+                fields: (collection.fields || [])
+                    .filter(field => field.key && field.displayName) // Only include fields with valid key and displayName
+                    .map(field => ({
+                        key: field.key!,
+                        displayName: field.displayName!,
+                        type: (field.type as any) || 'TEXT',
+                        required: field.required || false,
+                        readOnly: field.readOnly || false
+                    })),
+                permissions: {
+                    read: (collection.permissions?.read as any) || 'ANYONE',
+                    insert: (collection.permissions?.insert as any) || 'ANYONE',
+                    update: (collection.permissions?.update as any) || 'ANYONE',
+                    remove: (collection.permissions?.remove as any) || 'ANYONE'
+                }
+            }));
+
+        console.log('Processed CMS collections:', cmsCollections.length);
+        return cmsCollections;
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.error('Error getting CMS collections:', error);
+        throw new Error(`Failed to get CMS collections: ${errorMessage}`);
+    }
+}
+
+/**
+ * Query CMS collection items
+ */
+export async function queryCMSItems(options: CMSQueryOptions): Promise<CMSQueryResult> {
+    console.log('=== queryCMSItems called ===');
+    console.log('Options:', options);
+
+    try {
+        let query = elevatedQueryDataItems(options.collectionId);
+
+        // Add sorting
+        if (options.sortBy && options.sortOrder) {
+            if (options.sortOrder === 'desc') {
+                query = query.descending(options.sortBy);
+            } else {
+                query = query.ascending(options.sortBy);
+            }
+        } else {
+            // Default sort by creation date, descending
+            query = query.descending('_createdDate');
+        }
+
+        // Add pagination
+        if (options.limit) {
+            query = query.limit(options.limit);
+        }
+        // Note: Field selection removed due to API compatibility issues
+        // All fields will be returned in the query results
+        if (options.fields && options.fields.length > 0) {
+            console.log('Field selection requested but skipped for compatibility:', options.fields);
+        }
+
+        // Add basic text search if provided
+        if (options.searchQuery) {
+            // Create separate filters for different field types
+            let searchFilter = items.filter().contains('title', options.searchQuery);
+
+            try {
+                searchFilter = searchFilter
+                    .or(items.filter().contains('name', options.searchQuery))
+                    .or(items.filter().contains('description', options.searchQuery));
+            } catch (e) {
+                // If these fields don't exist, just use title search
+                console.log('Some search fields may not exist, using basic search');
+            }
+
+            query = query.and(searchFilter);
+        }
+
+        console.log('Executing CMS query...');
+        const result = await query.find({
+            returnTotalCount: true,
+            consistentRead: true
+        });
+
+        console.log('CMS query result:', result);
+
+        const finalResult: CMSQueryResult = {
+            items: result.items as CMSItem[],
+            totalCount: result.totalCount || result.items.length,
+            hasNext: result.hasNext(),
+            hasPrev: result.hasPrev(),
+            cursors: {
+                next: undefined, // Wix Data doesn't expose cursors directly
+                prev: undefined
+            },
+            length: result.items.length,
+            pageSize: result.pageSize || 50
+        };
+
+        console.log('Final CMS result:', finalResult);
+        return finalResult;
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.error('Error querying CMS items:', error);
+        throw new Error(`Failed to query CMS items: ${errorMessage}`);
+    }
+}
+
+/**
+ * Get CMS collections with item counts
+ */
+export async function getCMSCollectionsWithCounts(): Promise<CollectionInfo[]> {
+    console.log('=== getCMSCollectionsWithCounts called ===');
+
+    try {
+        const collections = await getCMSCollections();
+        const collectionsInfo: CollectionInfo[] = [];
+
+        for (const collection of collections) {
+            try {
+                // Get item count for each collection
+                const itemsResult = await queryCMSItems({
+                    collectionId: collection._id,
+                    limit: 1
+                });
+
+                collectionsInfo.push({
+                    collectionId: collection._id,
+                    collectionName: collection.displayName,
+                    itemCount: itemsResult.totalCount,
+                    collectionType: collection.collectionType,
+                    lastUpdatedDate: collection._updatedDate
+                });
+            } catch (error) {
+                console.log(`Error getting count for collection ${collection._id}:`, error);
+                // Still add the collection even if we can't get the count
+                collectionsInfo.push({
+                    collectionId: collection._id,
+                    collectionName: collection.displayName,
+                    itemCount: 0,
+                    collectionType: collection.collectionType,
+                    lastUpdatedDate: collection._updatedDate
+                });
+            }
+        }
+
+        // Sort by item count descending
+        collectionsInfo.sort((a, b) => b.itemCount - a.itemCount);
+
+        console.log('Collections with counts:', collectionsInfo);
+        return collectionsInfo;
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.error('Error getting CMS collections with counts:', error);
+        throw new Error(`Failed to get CMS collections with counts: ${errorMessage}`);
+    }
 }
